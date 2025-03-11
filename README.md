@@ -5,6 +5,7 @@ A React application for tracking and visualizing energy usage patterns.
 ## Quick Start 🚀
 
 ```dotenv
+git clone https://github.com/TTMordred/TimeFlow.git
 # Install dependencies
 npm install
 npm install vite --save-dev
