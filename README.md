@@ -1,69 +1,66 @@
-# Welcome to your Lovable project
+# TimeFlow 🌱
 
-## Project info
+A React application for tracking and visualizing energy usage patterns.
 
-**URL**: https://lovable.dev/projects/198c6738-35c0-4c8b-ae70-ae8f39a6b6c4
+## Quick Start 🚀
 
-## How can I edit this code?
+```dotenv
+# Install dependencies
+npm install
+npm install vite --save-dev
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/198c6738-35c0-4c8b-ae70-ae8f39a6b6c4) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start dev server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Tech Stack 💻
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- **Framework:** React + TypeScript
+- **Build Tool:** Vite
+- **Styling:** Tailwind CSS
+- **UI Components:** shadcn/ui
+- **Backend:** Supabase
+- **Package Manager:** npm/bun
 
-**Use GitHub Codespaces**
+## Project Structure 📁
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```
+src/
+├── components/     # Reusable UI components
+├── hooks/         # Custom React hooks
+├── integrations/  # External service integrations
+├── layout/        # Layout components
+├── lib/          # Utility functions
+└── pages/        # Application pages
+```
 
-## What technologies are used for this project?
+## Main Features 🎯
 
-This project is built with .
+- User Authentication
+- Dashboard Analytics
+- Energy Usage Statistics
+- Achievement System
+- Leaderboard
+- Calendar Integration
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Development 🛠️
 
-## How can I deploy this project?
+### Prerequisites
 
-Simply open [Lovable](https://lovable.dev/projects/198c6738-35c0-4c8b-ae70-ae8f39a6b6c4) and click on Share -> Publish.
+- Node.js (LTS version)
+- npm or bun
 
-## I want to use a custom domain - is that possible?
+### Local Development
 
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+1. Clone the repository
+2. Install dependencies: `npm install` `npm install vite --save-dev`
+3. Start the dev server: `npm run dev`
+4. Open `http://localhost:5173`
+
+### Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+
+## Deployment 🌐
