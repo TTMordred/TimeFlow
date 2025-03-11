@@ -73,21 +73,22 @@ const EnergyTree: React.FC<EnergyTreeProps> = ({
   };
 
   return (
-    <div className={cn('relative flex flex-col items-center justify-end', sizeClasses[size])}>
-      {/* Tree trunk */}
-      <div
-        className={cn(
-          "absolute bottom-0 left-1/2 transform -translate-x-1/2 w-3 bg-[#854d0e] rounded-full z-10 transition-all duration-1000",
-          getTrunkHeight()
-        )}
-      />
-      
-      {/* Tree container with clipping mask */}
-      <div className={cn(
-        "absolute left-1/2 transform -translate-x-1/2 overflow-hidden z-0 transition-all duration-1000",
-        getFoliageSize(),
-        stage === 'seed' ? 'bottom-8' : 'bottom-16'
-      )}>
+    <div className={cn('relative flex flex-col items-center', sizeClasses[size])}>
+      <div className="relative h-full flex items-end mb-2">
+        {/* Tree trunk */}
+        <div
+          className={cn(
+            "absolute bottom-0 left-1/2 transform -translate-x-1/2 w-3 bg-[#854d0e] rounded-full z-10 transition-all duration-1000",
+            getTrunkHeight()
+          )}
+        />
+        
+        {/* Tree container with clipping mask */}
+        <div className={cn(
+          "absolute left-1/2 transform -translate-x-1/2 overflow-hidden z-0 transition-all duration-1000",
+          getFoliageSize(),
+          stage === 'seed' ? 'bottom-8' : 'bottom-16'
+        )}>
         {/* Tree foliage container */}
         <div className="absolute bottom-0 left-0 w-full h-full">
           {/* Tree foliage background (empty) */}
@@ -113,9 +114,10 @@ const EnergyTree: React.FC<EnergyTreeProps> = ({
             }}
           />
         </div>
-      </div>
-      
-      {/* Progress text */}
+       </div>
+     </div>
+
+     {/* Progress text */}
       <div className="mt-6 flex flex-col items-center">
         <div className="relative w-24 h-2 bg-background/20 rounded-full overflow-hidden shadow-inner">
           <div
