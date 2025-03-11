@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { Home, Clock, BarChart3, Settings, Menu, X, LogOut, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useAuth } from '@/components/context/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import {
   DropdownMenu,
   DropdownMenuContent,

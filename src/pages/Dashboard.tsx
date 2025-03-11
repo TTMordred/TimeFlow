@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/components/context/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import EnergyTree from '@/components/EnergyTree';
 import StreakCounter from '@/components/StreakCounter';
 import { Button } from '@/components/ui/button';

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '@/components/context/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,8 +38,9 @@ const Auth = () => {
       if (error) {
         toast(error.message || 'An error occurred');
       }
-    } catch (err: any) {
-      toast(err.message || 'An error occurred');
+    } catch (err) {
+      const error = err as Error;
+      toast(error.message || 'An error occurred');
     } finally {
       setIsSubmitting(false);
     }
@@ -49,8 +50,9 @@ const Auth = () => {
     setIsGoogleLoading(true);
     try {
       await signInWithGoogle();
-    } catch (err: any) {
-      toast(err.message || 'An error occurred with Google sign in');
+    } catch (err) {
+      const error = err as Error;
+      toast(error.message || 'An error occurred with Google sign in');
     } finally {
       // Set a timeout since we're redirecting
       setTimeout(() => setIsGoogleLoading(false), 5000);
