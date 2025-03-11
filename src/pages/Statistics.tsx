@@ -1,7 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import Stats from '@/components/Stats';
 import Calendar from '@/components/Calendar';
+import AchievementCard, { Achievement } from '@/components/AchievementCard';
+import LeaderboardPreview from '@/components/LeaderboardPreview';
 import { format, startOfWeek, addDays } from 'date-fns';
 
 // Mock calendar data - in a real app, this would come from a database
@@ -84,10 +85,94 @@ const generateWeeklyData = () => {
   return data;
 };
 
+// Mock achievements data
+const generateAchievements = (data: any): Achievement[] => {
+  return [
+    {
+      id: '1',
+      title: 'Early Bird',
+      description: 'Complete 5 sessions before 9 AM',
+      icon: 'star',
+      unlocked: true,
+      progress: 100
+    },
+    {
+      id: '2',
+      title: 'Consistency Master',
+      description: 'Maintain a 7-day streak',
+      icon: 'award',
+      unlocked: data.currentStreak >= 7,
+      progress: Math.min(100, (data.currentStreak / 7) * 100)
+    },
+    {
+      id: '3',
+      title: 'Focus Champion',
+      description: 'Complete 20 focused sessions',
+      icon: 'trophy',
+      unlocked: data.completedSessions >= 20,
+      progress: Math.min(100, (data.completedSessions / 20) * 100)
+    },
+    {
+      id: '4',
+      title: '10-Hour Milestone',
+      description: 'Accumulate 10 hours of focused time',
+      icon: 'clock',
+      unlocked: data.totalMinutes >= 600,
+      progress: Math.min(100, (data.totalMinutes / 600) * 100)
+    }
+  ];
+};
+
+// Mock leaderboard data
+const generateLeaderboardData = (data: any) => {
+  // In a real app, this would be fetched from an API
+  return {
+    topUsers: [
+      {
+        id: '1',
+        name: 'Alex Chen',
+        avatar: '',
+        points: 1250,
+        streak: 15,
+        rank: 1
+      },
+      {
+        id: '2',
+        name: 'Maria Rodriguez',
+        avatar: '',
+        points: 980,
+        streak: 8,
+        rank: 2
+      },
+      {
+        id: '3',
+        name: 'Jamal Wilson',
+        avatar: '',
+        points: 820,
+        streak: 6,
+        rank: 3
+      }
+    ],
+    currentUserRank: {
+      id: 'current',
+      name: 'You',
+      avatar: '',
+      points: Math.floor(data.totalMinutes + (data.currentStreak * 10)),
+      streak: data.currentStreak,
+      rank: 12
+    }
+  };
+};
+
 const Statistics: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [calendarDays, setCalendarDays] = useState<any[]>([]);
   const [weeklyData, setWeeklyData] = useState<any[]>([]);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [leaderboardData, setLeaderboardData] = useState<{
+    topUsers: any[],
+    currentUserRank: any
+  }>({ topUsers: [], currentUserRank: null });
   
   useEffect(() => {
     // Get data from localStorage
@@ -105,6 +190,8 @@ const Statistics: React.FC = () => {
     setData(parsedData);
     setCalendarDays(generateCalendarData(parsedData));
     setWeeklyData(generateWeeklyData());
+    setAchievements(generateAchievements(parsedData));
+    setLeaderboardData(generateLeaderboardData(parsedData));
   }, []);
   
   if (!data) {
@@ -116,62 +203,80 @@ const Statistics: React.FC = () => {
   }
   
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in">
-      <div>
-        <h1 className="text-3xl font-semibold mb-8">Your Statistics</h1>
-        
+    <div className="animate-fade-in">
+      <h1 className="text-3xl font-semibold mb-8">Your Statistics</h1>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         <Stats 
           totalMinutes={data.totalMinutes} 
           completedSessions={data.completedSessions}
           currentStreak={data.currentStreak}
           weeklyData={weeklyData}
         />
-      </div>
-      
-      <div>
-        <h1 className="text-3xl font-semibold mb-8">Activity Calendar</h1>
         
         <Calendar days={calendarDays} />
-        
-        <div className="glass rounded-xl p-6 mt-8">
-          <h2 className="text-xl font-medium mb-4">Time Breakdown</h2>
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-sm">Daily Average</span>
-                <span className="text-sm font-medium">
-                  {Math.round(data.totalMinutes / Math.max(1, data.completedSessions / 2))} min
-                </span>
+      </div>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <div>
+          <h2 className="text-2xl font-semibold mb-4">Your Achievements</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {achievements.map(achievement => (
+              <AchievementCard 
+                key={achievement.id} 
+                achievement={achievement} 
+              />
+            ))}
+          </div>
+          
+          <div className="glass rounded-xl p-6 mt-8">
+            <h2 className="text-xl font-medium mb-4">Time Breakdown</h2>
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-sm">Daily Average</span>
+                  <span className="text-sm font-medium">
+                    {Math.round(data.totalMinutes / Math.max(1, data.completedSessions / 2))} min
+                  </span>
+                </div>
+                <div className="w-full bg-secondary rounded-full h-1.5">
+                  <div className="bg-timeflow-green-400 h-1.5 rounded-full" style={{ width: "65%" }} />
+                </div>
               </div>
-              <div className="w-full bg-secondary rounded-full h-1.5">
-                <div className="bg-timeflow-green-400 h-1.5 rounded-full" style={{ width: "65%" }} />
+              
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-sm">Weekly Goal</span>
+                  <span className="text-sm font-medium">
+                    {data.dailyGoalMinutes * 7} min
+                  </span>
+                </div>
+                <div className="w-full bg-secondary rounded-full h-1.5">
+                  <div className="bg-timeflow-green-400 h-1.5 rounded-full" style={{ width: "42%" }} />
+                </div>
               </div>
-            </div>
-            
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-sm">Weekly Goal</span>
-                <span className="text-sm font-medium">
-                  {data.dailyGoalMinutes * 7} min
-                </span>
-              </div>
-              <div className="w-full bg-secondary rounded-full h-1.5">
-                <div className="bg-timeflow-green-400 h-1.5 rounded-full" style={{ width: "42%" }} />
-              </div>
-            </div>
-            
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-sm">Monthly Progress</span>
-                <span className="text-sm font-medium">
-                  {Math.round(data.totalMinutes / 60)} hours
-                </span>
-              </div>
-              <div className="w-full bg-secondary rounded-full h-1.5">
-                <div className="bg-timeflow-green-400 h-1.5 rounded-full" style={{ width: "28%" }} />
+              
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span className="text-sm">Monthly Progress</span>
+                  <span className="text-sm font-medium">
+                    {Math.round(data.totalMinutes / 60)} hours
+                  </span>
+                </div>
+                <div className="w-full bg-secondary rounded-full h-1.5">
+                  <div className="bg-timeflow-green-400 h-1.5 rounded-full" style={{ width: "28%" }} />
+                </div>
               </div>
             </div>
           </div>
+        </div>
+        
+        <div>
+          <h2 className="text-2xl font-semibold mb-4">Community</h2>
+          <LeaderboardPreview 
+            topUsers={leaderboardData.topUsers}
+            currentUserRank={leaderboardData.currentUserRank}
+          />
         </div>
       </div>
     </div>
