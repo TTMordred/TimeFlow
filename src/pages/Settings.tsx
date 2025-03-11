@@ -1,5 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/components/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,44 +10,140 @@ import { Clock, Bell, Trash2, Save, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Settings: React.FC = () => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [dailyGoal, setDailyGoal] = useState(60);
   const [enableNotifications, setEnableNotifications] = useState(true);
   
+  // Get user settings
+  const { data: userSettings, isLoading } = useQuery({
+    queryKey: ['user-settings', user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      
+      // Get daily goal from daily_progress
+      const today = new Date().toISOString().split('T')[0];
+      const { data: dailyData } = await supabase
+        .from('daily_progress')
+        .select('goal_minutes')
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .maybeSingle();
+        
+      return {
+        dailyGoalMinutes: dailyData?.goal_minutes || 60
+      };
+    },
+    enabled: !!user,
+  });
+  
   useEffect(() => {
-    const storageData = localStorage.getItem('timeflowData');
-    if (storageData) {
-      const data = JSON.parse(storageData);
-      setDailyGoal(data.dailyGoalMinutes || 60);
+    if (userSettings) {
+      setDailyGoal(userSettings.dailyGoalMinutes);
     }
-  }, []);
+  }, [userSettings]);
   
-  const handleSaveSettings = () => {
-    // Get current data from localStorage
-    const storageData = localStorage.getItem('timeflowData');
-    let data = storageData ? JSON.parse(storageData) : {
-      currentStreak: 0,
-      maxStreak: 0,
-      dailyGoalMinutes: 60,
-      todayMinutes: 0,
-      totalMinutes: 0,
-      completedSessions: 0,
-      lastActiveDate: null,
-    };
-    
-    // Update settings
-    data.dailyGoalMinutes = dailyGoal;
-    
-    // Save updated data
-    localStorage.setItem('timeflowData', JSON.stringify(data));
-    
-    toast("Settings saved", {
-      description: "Your settings have been updated successfully.",
-    });
-  };
+  // Save settings mutation
+  const saveSettingsMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("User not authenticated");
+      
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Get current daily progress
+      const { data: dailyData } = await supabase
+        .from('daily_progress')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .maybeSingle();
+        
+      if (dailyData) {
+        // Update goal minutes
+        const { error } = await supabase
+          .from('daily_progress')
+          .update({ goal_minutes: dailyGoal })
+          .eq('id', dailyData.id);
+          
+        if (error) throw error;
+      } else {
+        // Create new daily progress entry
+        const { error } = await supabase
+          .from('daily_progress')
+          .insert({
+            user_id: user.id,
+            date: today,
+            minutes_completed: 0,
+            goal_minutes: dailyGoal,
+            goal_completed: false
+          });
+          
+        if (error) throw error;
+      }
+      
+      return { success: true };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['user-data'] });
+      
+      toast("Settings saved", {
+        description: "Your settings have been updated successfully.",
+      });
+    },
+    onError: (error) => {
+      console.error("Settings save error:", error);
+      toast("Error saving settings", {
+        description: "There was a problem saving your settings. Please try again.",
+      });
+    }
+  });
   
-  const handleResetData = () => {
-    if (confirm("Are you sure you want to reset all your data? This cannot be undone.")) {
-      localStorage.removeItem('timeflowData');
+  // Reset data mutation
+  const resetDataMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("User not authenticated");
+      
+      // Delete sessions
+      const { error: sessionsError } = await supabase
+        .from('sessions')
+        .delete()
+        .eq('user_id', user.id);
+        
+      if (sessionsError) throw sessionsError;
+      
+      // Delete daily_progress
+      const { error: progressError } = await supabase
+        .from('daily_progress')
+        .delete()
+        .eq('user_id', user.id);
+        
+      if (progressError) throw progressError;
+      
+      // Reset streaks
+      const { error: streakError } = await supabase
+        .from('streaks')
+        .update({
+          current_streak: 0,
+          max_streak: 0,
+          last_active_date: null
+        })
+        .eq('user_id', user.id);
+        
+      if (streakError) throw streakError;
+      
+      // Reset user achievements
+      const { error: achievementsError } = await supabase
+        .from('user_achievements')
+        .delete()
+        .eq('user_id', user.id);
+        
+      if (achievementsError) throw achievementsError;
+      
+      return { success: true };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries();
       
       toast("Data reset", {
         description: "All your data has been reset.",
@@ -54,8 +153,32 @@ const Settings: React.FC = () => {
       setTimeout(() => {
         window.location.reload();
       }, 1000);
+    },
+    onError: (error) => {
+      console.error("Data reset error:", error);
+      toast("Error resetting data", {
+        description: "There was a problem resetting your data. Please try again.",
+      });
+    }
+  });
+  
+  const handleSaveSettings = () => {
+    saveSettingsMutation.mutate();
+  };
+  
+  const handleResetData = () => {
+    if (confirm("Are you sure you want to reset all your data? This cannot be undone.")) {
+      resetDataMutation.mutate();
     }
   };
+  
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[70vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
   
   return (
     <div className="container mx-auto max-w-2xl animate-fade-in">

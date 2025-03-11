@@ -9,7 +9,204 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      achievements: {
+        Row: {
+          description: string
+          icon: string
+          id: string
+          requirement_type: string
+          requirement_value: number
+          title: string
+        }
+        Insert: {
+          description: string
+          icon: string
+          id?: string
+          requirement_type: string
+          requirement_value: number
+          title: string
+        }
+        Update: {
+          description?: string
+          icon?: string
+          id?: string
+          requirement_type?: string
+          requirement_value?: number
+          title?: string
+        }
+        Relationships: []
+      }
+      daily_progress: {
+        Row: {
+          date: string
+          goal_completed: boolean
+          goal_minutes: number
+          id: string
+          minutes_completed: number
+          user_id: string
+        }
+        Insert: {
+          date?: string
+          goal_completed?: boolean
+          goal_minutes?: number
+          id?: string
+          minutes_completed?: number
+          user_id: string
+        }
+        Update: {
+          date?: string
+          goal_completed?: boolean
+          goal_minutes?: number
+          id?: string
+          minutes_completed?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      sessions: {
+        Row: {
+          category: string
+          completed: boolean
+          created_at: string
+          duration: number
+          id: string
+          notes: string | null
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          completed?: boolean
+          created_at?: string
+          duration: number
+          id?: string
+          notes?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string
+          completed?: boolean
+          created_at?: string
+          duration?: number
+          id?: string
+          notes?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      streaks: {
+        Row: {
+          current_streak: number
+          id: string
+          last_active_date: string | null
+          max_streak: number
+          user_id: string
+        }
+        Insert: {
+          current_streak?: number
+          id?: string
+          last_active_date?: string | null
+          max_streak?: number
+          user_id: string
+        }
+        Update: {
+          current_streak?: number
+          id?: string
+          last_active_date?: string | null
+          max_streak?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "streaks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_achievements: {
+        Row: {
+          achievement_id: string
+          id: string
+          progress: number
+          unlocked_at: string
+          user_id: string
+        }
+        Insert: {
+          achievement_id: string
+          id?: string
+          progress?: number
+          unlocked_at?: string
+          user_id: string
+        }
+        Update: {
+          achievement_id?: string
+          id?: string
+          progress?: number
+          unlocked_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_achievements_achievement_id_fkey"
+            columns: ["achievement_id"]
+            isOneToOne: false
+            referencedRelation: "achievements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_achievements_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

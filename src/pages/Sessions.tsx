@@ -1,5 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/components/context/AuthContext';
 import Timer from '@/components/Timer';
 import EnergyTree from '@/components/EnergyTree';
 import { Button } from '@/components/ui/button';
@@ -7,6 +10,8 @@ import { PlusCircle, MinusCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Sessions: React.FC = () => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [sessionDuration, setSessionDuration] = useState(25);
   const [progress, setProgress] = useState(0);
   
@@ -19,46 +24,124 @@ const Sessions: React.FC = () => {
     setProgress(timerProgress);
   };
   
-  const handleSessionComplete = () => {
-    // Get current data from localStorage
-    const storageData = localStorage.getItem('timeflowData');
-    let data = storageData ? JSON.parse(storageData) : {
-      currentStreak: 0,
-      maxStreak: 0,
-      dailyGoalMinutes: 60,
-      todayMinutes: 0,
-      totalMinutes: 0,
-      completedSessions: 0,
-      lastActiveDate: null,
-    };
-    
-    // Update session data
-    const today = new Date().toISOString();
-    data.todayMinutes += sessionDuration;
-    data.totalMinutes += sessionDuration;
-    data.completedSessions += 1;
-    data.lastActiveDate = today;
-    
-    // Check if daily goal is met for the first time today
-    const wasGoalMet = data.todayMinutes - sessionDuration >= data.dailyGoalMinutes;
-    const isGoalMet = data.todayMinutes >= data.dailyGoalMinutes;
-    
-    if (isGoalMet && !wasGoalMet) {
-      // Daily goal just achieved
-      data.currentStreak += 1;
-      data.maxStreak = Math.max(data.currentStreak, data.maxStreak);
+  // Mutation for completing a session
+  const sessionMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("User not authenticated");
       
-      toast("Daily goal achieved!", {
-        description: `You've maintained a streak of ${data.currentStreak} days. Keep it up!`,
+      // Get today's date in YYYY-MM-DD format
+      const today = new Date().toISOString().split('T')[0];
+      
+      // 1. Create the session
+      const { error: sessionError } = await supabase
+        .from('sessions')
+        .insert({
+          user_id: user.id,
+          duration: sessionDuration,
+          completed: true,
+          category: 'default'
+        });
+      
+      if (sessionError) throw sessionError;
+      
+      // 2. Update daily progress
+      // First get current daily progress
+      const { data: dailyData, error: dailyFetchError } = await supabase
+        .from('daily_progress')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .maybeSingle();
+      
+      if (dailyFetchError) throw dailyFetchError;
+      
+      // If no daily progress yet, create it
+      if (!dailyData) {
+        const { error } = await supabase
+          .from('daily_progress')
+          .insert({
+            user_id: user.id,
+            date: today,
+            minutes_completed: sessionDuration,
+            goal_minutes: 60,
+            goal_completed: sessionDuration >= 60
+          });
+          
+        if (error) throw error;
+      } else {
+        // Update existing daily progress
+        const newMinutesCompleted = dailyData.minutes_completed + sessionDuration;
+        const goalCompleted = newMinutesCompleted >= dailyData.goal_minutes;
+        
+        const { error } = await supabase
+          .from('daily_progress')
+          .update({
+            minutes_completed: newMinutesCompleted,
+            goal_completed: goalCompleted
+          })
+          .eq('id', dailyData.id);
+          
+        if (error) throw error;
+        
+        // 3. Check if daily goal was just met for the first time today
+        if (goalCompleted && !dailyData.goal_completed) {
+          // Get streak data
+          const { data: streakData, error: streakError } = await supabase
+            .from('streaks')
+            .select('*')
+            .eq('user_id', user.id)
+            .maybeSingle();
+            
+          if (streakError) throw streakError;
+          
+          if (streakData) {
+            // Update streak
+            const newStreak = streakData.current_streak + 1;
+            const newMaxStreak = Math.max(streakData.max_streak, newStreak);
+            
+            const { error } = await supabase
+              .from('streaks')
+              .update({
+                current_streak: newStreak,
+                max_streak: newMaxStreak,
+                last_active_date: today
+              })
+              .eq('id', streakData.id);
+              
+            if (error) throw error;
+            
+            // Show streak notification
+            toast("Daily goal achieved!", {
+              description: `You've maintained a streak of ${newStreak} days. Keep it up!`,
+            });
+          }
+        }
+      }
+      
+      // 4. Update achievements
+      // This would check for completed achievements and update them
+      // Will be implemented in a separate function
+      
+      return { success: true };
+    },
+    onSuccess: () => {
+      // Invalidate queries to refetch data
+      queryClient.invalidateQueries({ queryKey: ['user-data'] });
+      
+      toast("Session complete!", {
+        description: `You've added ${sessionDuration} minutes to your progress.`,
+      });
+    },
+    onError: (error) => {
+      console.error("Session completion error:", error);
+      toast("Error completing session", {
+        description: "There was a problem saving your session. Please try again.",
       });
     }
-    
-    // Save updated data
-    localStorage.setItem('timeflowData', JSON.stringify(data));
-    
-    toast("Session complete!", {
-      description: `You've added ${sessionDuration} minutes to your progress.`,
-    });
+  });
+  
+  const handleSessionComplete = () => {
+    sessionMutation.mutate();
   };
   
   return (

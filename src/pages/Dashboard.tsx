@@ -1,5 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/components/context/AuthContext';
 import EnergyTree from '@/components/EnergyTree';
 import StreakCounter from '@/components/StreakCounter';
 import { Button } from '@/components/ui/button';
@@ -7,76 +10,111 @@ import { Clock, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
-// Mock data - in a real app, this would come from a database or localStorage
-const getDataFromStorage = () => {
-  try {
-    const data = localStorage.getItem('timeflowData');
-    if (data) {
-      return JSON.parse(data);
-    }
-  } catch (error) {
-    console.error('Error retrieving data from localStorage', error);
-  }
-  
-  return {
-    currentStreak: 0,
-    maxStreak: 0,
-    dailyGoalMinutes: 60,
-    todayMinutes: 0,
-    totalMinutes: 0,
-    completedSessions: 0,
-    lastActiveDate: null,
-  };
-};
-
 const Dashboard: React.FC = () => {
-  const [data, setData] = useState(getDataFromStorage());
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [dailyProgress, setDailyProgress] = useState(0);
   
-  // Calculate daily progress percentage
-  useEffect(() => {
-    const progress = Math.min(100, (data.todayMinutes / data.dailyGoalMinutes) * 100);
-    setDailyProgress(progress);
-  }, [data.todayMinutes, data.dailyGoalMinutes]);
-  
-  // When component mounts, check if we need to reset daily minutes and update streak
-  useEffect(() => {
-    const today = new Date().toDateString();
-    const lastActive = data.lastActiveDate ? new Date(data.lastActiveDate).toDateString() : null;
-    
-    if (lastActive && lastActive !== today) {
-      // Check if we missed a day (streak broken)
-      const lastActiveDate = new Date(data.lastActiveDate);
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
+  // Fetch user data
+  const { data: userData, isLoading: userLoading } = useQuery({
+    queryKey: ['user-data', user?.id],
+    queryFn: async () => {
+      if (!user) return null;
       
-      if (lastActiveDate.toDateString() !== yesterday.toDateString()) {
-        // Streak is broken
-        setData(prev => ({
-          ...prev,
-          currentStreak: 0,
-          todayMinutes: 0,
-          lastActiveDate: today,
-        }));
-        
-        toast("Streak broken", {
-          description: "You missed a day. Your streak has been reset.",
-        });
-      } else {
-        // New day, but streak continues
-        setData(prev => ({
-          ...prev,
-          todayMinutes: 0,
-          lastActiveDate: today,
-        }));
+      // Get today's date in YYYY-MM-DD format
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Get daily progress for today
+      const { data: dailyData } = await supabase
+        .from('daily_progress')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .maybeSingle();
+      
+      // Get streak data
+      const { data: streakData } = await supabase
+        .from('streaks')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      // Get total stats
+      const { data: sessionsData, error: sessionsError } = await supabase
+        .from('sessions')
+        .select('duration')
+        .eq('user_id', user.id)
+        .eq('completed', true);
+      
+      if (sessionsError) {
+        throw sessionsError;
       }
-    }
-  }, [data.lastActiveDate]);
+      
+      // If no daily progress yet, create it
+      if (!dailyData) {
+        const { error } = await supabase
+          .from('daily_progress')
+          .insert({
+            user_id: user.id,
+            date: today,
+            minutes_completed: 0,
+            goal_minutes: 60,
+            goal_completed: false
+          });
+          
+        if (error) throw error;
+      }
+      
+      // If no streak data yet, create it
+      if (!streakData) {
+        const { error } = await supabase
+          .from('streaks')
+          .insert({
+            user_id: user.id,
+            current_streak: 0,
+            max_streak: 0
+          });
+          
+        if (error) throw error;
+      }
+      
+      // Calculate total minutes from all sessions
+      const totalMinutes = sessionsData?.reduce((total, session) => total + session.duration, 0) || 0;
+      const completedSessions = sessionsData?.length || 0;
+      
+      return {
+        dailyData: dailyData || { 
+          minutes_completed: 0, 
+          goal_minutes: 60, 
+          goal_completed: false 
+        },
+        streakData: streakData || { 
+          current_streak: 0, 
+          max_streak: 0 
+        },
+        totalMinutes,
+        completedSessions
+      };
+    },
+    enabled: !!user,
+  });
   
-  // Save data to localStorage whenever it changes
+  // Update daily progress percentage
   useEffect(() => {
-    localStorage.setItem('timeflowData', JSON.stringify(data));
-  }, [data]);
+    if (userData?.dailyData) {
+      const progress = Math.min(100, (userData.dailyData.minutes_completed / userData.dailyData.goal_minutes) * 100);
+      setDailyProgress(progress);
+    }
+  }, [userData]);
+  
+  // Loading state
+  if (userLoading) {
+    return (
+      <div className="flex items-center justify-center h-[70vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
   
   const completedForToday = dailyProgress >= 100;
   
@@ -112,13 +150,13 @@ const Dashboard: React.FC = () => {
             <div className="p-4 rounded-lg bg-secondary/50">
               <p className="text-sm text-muted-foreground">Time Today</p>
               <p className="text-2xl font-medium">
-                {Math.floor(data.todayMinutes / 60)}h {data.todayMinutes % 60}m
+                {Math.floor(userData?.dailyData?.minutes_completed / 60 || 0)}h {userData?.dailyData?.minutes_completed % 60 || 0}m
               </p>
             </div>
             <div className="p-4 rounded-lg bg-secondary/50">
               <p className="text-sm text-muted-foreground">Daily Goal</p>
               <p className="text-2xl font-medium">
-                {Math.floor(data.dailyGoalMinutes / 60)}h {data.dailyGoalMinutes % 60}m
+                {Math.floor(userData?.dailyData?.goal_minutes / 60 || 0)}h {userData?.dailyData?.goal_minutes % 60 || 0}m
               </p>
             </div>
           </div>
@@ -126,7 +164,7 @@ const Dashboard: React.FC = () => {
           <div className="mt-4">
             <div className="flex justify-between text-sm mb-1">
               <span>{completedForToday ? "Completed!" : "In progress..."}</span>
-              <span>{data.todayMinutes}/{data.dailyGoalMinutes} min</span>
+              <span>{userData?.dailyData?.minutes_completed || 0}/{userData?.dailyData?.goal_minutes || 60} min</span>
             </div>
             <div className="w-full bg-secondary rounded-full h-2.5">
               <div 
@@ -138,19 +176,19 @@ const Dashboard: React.FC = () => {
         </div>
         
         <StreakCounter 
-          currentStreak={data.currentStreak} 
-          maxStreak={data.maxStreak} 
+          currentStreak={userData?.streakData?.current_streak || 0} 
+          maxStreak={userData?.streakData?.max_streak || 0} 
         />
         
         <div className="glass rounded-xl p-6">
           <h2 className="text-xl font-medium mb-4">Quick Stats</h2>
           <div className="flex justify-between mb-2">
             <span className="text-muted-foreground">Total Time</span>
-            <span>{Math.floor(data.totalMinutes / 60)}h {data.totalMinutes % 60}m</span>
+            <span>{Math.floor(userData?.totalMinutes / 60 || 0)}h {userData?.totalMinutes % 60 || 0}m</span>
           </div>
           <div className="flex justify-between mb-2">
             <span className="text-muted-foreground">Sessions Completed</span>
-            <span>{data.completedSessions}</span>
+            <span>{userData?.completedSessions || 0}</span>
           </div>
           
           <div className="mt-4">

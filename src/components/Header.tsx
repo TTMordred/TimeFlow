@@ -2,14 +2,22 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Home, Clock, BarChart3, Settings, Menu, X } from 'lucide-react';
+import { Home, Clock, BarChart3, Settings, Menu, X, LogOut, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useAuth } from '@/components/context/AuthContext';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const Header: React.FC = () => {
   const location = useLocation();
   const isMobile = useIsMobile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, signOut } = useAuth();
   
   const isActiveRoute = (path: string) => {
     return location.pathname === path;
@@ -71,34 +79,52 @@ const Header: React.FC = () => {
           </Link>
         </div>
         
-        {isMobile ? (
-          <>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-label="Toggle menu"
-            >
-              {mobileMenuOpen ? (
-                <X className="h-6 w-6" />
-              ) : (
-                <Menu className="h-6 w-6" />
+        <div className="flex items-center">
+          {user && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="mr-2">
+                  <User className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => signOut()}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Sign out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          
+          {isMobile ? (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                aria-label="Toggle menu"
+              >
+                {mobileMenuOpen ? (
+                  <X className="h-6 w-6" />
+                ) : (
+                  <Menu className="h-6 w-6" />
+                )}
+              </Button>
+              
+              {mobileMenuOpen && (
+                <div className="fixed inset-0 top-16 bg-background z-40 animate-fade-in">
+                  <nav className="container mx-auto p-4 flex flex-col space-y-2">
+                    <NavItems />
+                  </nav>
+                </div>
               )}
-            </Button>
-            
-            {mobileMenuOpen && (
-              <div className="fixed inset-0 top-16 bg-background z-40 animate-fade-in">
-                <nav className="container mx-auto p-4 flex flex-col space-y-2">
-                  <NavItems />
-                </nav>
-              </div>
-            )}
-          </>
-        ) : (
-          <nav className="flex items-center space-x-1">
-            <NavItems />
-          </nav>
-        )}
+            </>
+          ) : (
+            <nav className="flex items-center space-x-1">
+              <NavItems />
+            </nav>
+          )}
+        </div>
       </div>
     </header>
   );
