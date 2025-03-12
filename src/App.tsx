@@ -83,8 +83,8 @@ const App = () => (
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
-    {/* Add React Query Devtools for development */}
-    <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />
+    {/* Only show React Query Devtools in development mode */}
+    {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />}
   </QueryClientProvider>
 );
 
