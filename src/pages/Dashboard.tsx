@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import EnergyTree from '@/components/EnergyTree';
 import StreakCounter from '@/components/StreakCounter';
@@ -9,94 +8,24 @@ import { Button } from '@/components/ui/button';
 import { Clock, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
+import { fetchUserData } from '@/utils/dataUtils';
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
   const [dailyProgress, setDailyProgress] = useState(0);
   
-  // Fetch user data
-  const { data: userData, isLoading: userLoading } = useQuery({
+  // Fetch user data with React Query for automatic caching and refetching
+  const { data: userData, isLoading, error } = useQuery({
     queryKey: ['user-data', user?.id],
     queryFn: async () => {
       if (!user) return null;
-      
-      // Get today's date in YYYY-MM-DD format
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Get daily progress for today
-      const { data: dailyData } = await supabase
-        .from('daily_progress')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('date', today)
-        .maybeSingle();
-      
-      // Get streak data
-      const { data: streakData } = await supabase
-        .from('streaks')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
-      // Get total stats
-      const { data: sessionsData, error: sessionsError } = await supabase
-        .from('sessions')
-        .select('duration')
-        .eq('user_id', user.id)
-        .eq('completed', true);
-      
-      if (sessionsError) {
-        throw sessionsError;
-      }
-      
-      // If no daily progress yet, create it
-      if (!dailyData) {
-        const { error } = await supabase
-          .from('daily_progress')
-          .insert({
-            user_id: user.id,
-            date: today,
-            minutes_completed: 0,
-            goal_minutes: 60,
-            goal_completed: false
-          });
-          
-        if (error) throw error;
-      }
-      
-      // If no streak data yet, create it
-      if (!streakData) {
-        const { error } = await supabase
-          .from('streaks')
-          .insert({
-            user_id: user.id,
-            current_streak: 0,
-            max_streak: 0
-          });
-          
-        if (error) throw error;
-      }
-      
-      // Calculate total minutes from all sessions
-      const totalMinutes = sessionsData?.reduce((total, session) => total + session.duration, 0) || 0;
-      const completedSessions = sessionsData?.length || 0;
-      
-      return {
-        dailyData: dailyData || { 
-          minutes_completed: 0, 
-          goal_minutes: 60, 
-          goal_completed: false 
-        },
-        streakData: streakData || { 
-          current_streak: 0, 
-          max_streak: 0 
-        },
-        totalMinutes,
-        completedSessions
-      };
+      return fetchUserData(user.id);
     },
     enabled: !!user,
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+    refetchOnWindowFocus: true,
+    retry: 2,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
   
   // Update daily progress percentage
@@ -107,8 +36,18 @@ const Dashboard: React.FC = () => {
     }
   }, [userData]);
   
+  // Show error toast if data fetching fails
+  useEffect(() => {
+    if (error) {
+      toast.error("Failed to load dashboard data", {
+        description: "Please refresh the page or try again later.",
+      });
+      console.error("Dashboard data fetch error:", error);
+    }
+  }, [error]);
+  
   // Loading state
-  if (userLoading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[70vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -168,7 +107,7 @@ const Dashboard: React.FC = () => {
             </div>
             <div className="w-full bg-secondary rounded-full h-2.5">
               <div 
-                className="bg-primary h-2.5 rounded-full"
+                className="bg-primary h-2.5 rounded-full transition-all duration-500 ease-in-out"
                 style={{ width: `${dailyProgress}%` }}
               />
             </div>

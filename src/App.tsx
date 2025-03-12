@@ -1,51 +1,90 @@
 
+import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./components/context/AuthContext";
 import MainLayout from "./layout/MainLayout";
-import Dashboard from "./pages/Dashboard";
-import Sessions from "./pages/Sessions";
-import Statistics from "./pages/Statistics";
-import Settings from "./pages/Settings";
-import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 
-// Create query client for React Query
+// Lazy load pages for better performance
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Sessions = lazy(() => import("./pages/Sessions"));
+const Statistics = lazy(() => import("./pages/Statistics"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Auth = lazy(() => import("./pages/Auth"));
+
+// Create query client for React Query with improved configuration
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      retry: 2,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
       refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000, // 5 minutes
     },
   },
 });
+
+// Loading component for suspense fallback
+const PageLoader = () => (
+  <div className="flex items-center justify-center h-[70vh]">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+  </div>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <Sonner />
+      <Sonner position="top-right" expand closeButton theme="light" />
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            <Route path="/auth" element={<Auth />} />
-            <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/sessions" element={<Sessions />} />
-              <Route path="/statistics" element={<Statistics />} />
-              <Route path="/settings" element={<Settings />} />
+            <Route path="/auth" element={
+              <Suspense fallback={<PageLoader />}>
+                <Auth />
+              </Suspense>
+            } />
+            <Route element={
+              <ProtectedRoute>
+                <MainLayout />
+              </ProtectedRoute>
+            }>
+              <Route path="/" element={
+                <Suspense fallback={<PageLoader />}>
+                  <Dashboard />
+                </Suspense>
+              } />
+              <Route path="/sessions" element={
+                <Suspense fallback={<PageLoader />}>
+                  <Sessions />
+                </Suspense>
+              } />
+              <Route path="/statistics" element={
+                <Suspense fallback={<PageLoader />}>
+                  <Statistics />
+                </Suspense>
+              } />
+              <Route path="/settings" element={
+                <Suspense fallback={<PageLoader />}>
+                  <Settings />
+                </Suspense>
+              } />
             </Route>
-            {/* Special route for handling Vercel 404 errors */}
+            {/* Special routes for handling Vercel 404 errors */}
             <Route path="/404" element={<NotFound />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
+    {/* Add React Query Devtools for development */}
+    <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />
   </QueryClientProvider>
 );
 

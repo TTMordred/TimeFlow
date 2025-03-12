@@ -1,13 +1,13 @@
-
 import React, { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import Timer from '@/components/Timer';
 import EnergyTree from '@/components/EnergyTree';
 import { Button } from '@/components/ui/button';
 import { PlusCircle, MinusCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { updateDailyProgress, updateStreak } from '@/utils/dataUtils';
 
 const Sessions: React.FC = () => {
   const { user } = useAuth();
@@ -29,100 +29,44 @@ const Sessions: React.FC = () => {
     mutationFn: async () => {
       if (!user) throw new Error("User not authenticated");
       
-      // Get today's date in YYYY-MM-DD format
-      const today = new Date().toISOString().split('T')[0];
-      
-      // 1. Create the session
-      const { error: sessionError } = await supabase
-        .from('sessions')
-        .insert({
-          user_id: user.id,
-          duration: sessionDuration,
-          completed: true,
-          category: 'default'
-        });
-      
-      if (sessionError) throw sessionError;
-      
-      // 2. Update daily progress
-      // First get current daily progress
-      const { data: dailyData, error: dailyFetchError } = await supabase
-        .from('daily_progress')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('date', today)
-        .maybeSingle();
-      
-      if (dailyFetchError) throw dailyFetchError;
-      
-      // If no daily progress yet, create it
-      if (!dailyData) {
-        const { error } = await supabase
-          .from('daily_progress')
+      try {
+        // 1. Create the session
+        const { error: sessionError } = await supabase
+          .from('sessions')
           .insert({
             user_id: user.id,
-            date: today,
-            minutes_completed: sessionDuration,
-            goal_minutes: 60,
-            goal_completed: sessionDuration >= 60
+            duration: sessionDuration,
+            completed: true,
+            category: 'default'
           });
-          
-        if (error) throw error;
-      } else {
-        // Update existing daily progress
-        const newMinutesCompleted = dailyData.minutes_completed + sessionDuration;
-        const goalCompleted = newMinutesCompleted >= dailyData.goal_minutes;
         
-        const { error } = await supabase
-          .from('daily_progress')
-          .update({
-            minutes_completed: newMinutesCompleted,
-            goal_completed: goalCompleted
-          })
-          .eq('id', dailyData.id);
-          
-        if (error) throw error;
+        if (sessionError) throw sessionError;
         
-        // 3. Check if daily goal was just met for the first time today
-        if (goalCompleted && !dailyData.goal_completed) {
-          // Get streak data
-          const { data: streakData, error: streakError } = await supabase
-            .from('streaks')
-            .select('*')
-            .eq('user_id', user.id)
-            .maybeSingle();
-            
-          if (streakError) throw streakError;
+        // 2. Update daily progress
+        const updatedProgress = await updateDailyProgress(user.id, sessionDuration);
+        if (!updatedProgress) throw new Error("Failed to update daily progress");
+        
+        // 3. Update streak if goal was just completed
+        if (updatedProgress.goalCompleted && !updatedProgress.previousGoalCompleted) {
+          const streakUpdate = await updateStreak(
+            user.id, 
+            updatedProgress.goalCompleted, 
+            !!updatedProgress.previousGoalCompleted
+          );
           
-          if (streakData) {
-            // Update streak
-            const newStreak = streakData.current_streak + 1;
-            const newMaxStreak = Math.max(streakData.max_streak, newStreak);
-            
-            const { error } = await supabase
-              .from('streaks')
-              .update({
-                current_streak: newStreak,
-                max_streak: newMaxStreak,
-                last_active_date: today
-              })
-              .eq('id', streakData.id);
-              
-            if (error) throw error;
-            
+          if (streakUpdate) {
             // Show streak notification
             toast("Daily goal achieved!", {
-              description: `You've maintained a streak of ${newStreak} days. Keep it up!`,
+              description: `You've maintained a streak of ${streakUpdate.currentStreak} days. Keep it up!`,
             });
           }
         }
+        
+        return { success: true };
+      } catch (error) {
+        console.error("Session completion error:", error);
+        throw error;
       }
-      
-      // 4. Update achievements
-      // This would check for completed achievements and update them
-      // Will be implemented in a separate function
-      
-      return { success: true };
     },
     onSuccess: () => {
       // Invalidate queries to refetch data
