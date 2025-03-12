@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => ({
     allowedHosts: [
       'localhost',
       '*.lovableproject.com',
+      '198c6738-35c0-4c8b-ae70-ae8f39a6b6c4.lovableproject.com',
       '*.vercel.app'
     ]
   },

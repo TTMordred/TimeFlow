@@ -84,7 +84,7 @@ const App = () => (
       </BrowserRouter>
     </TooltipProvider>
     {/* Only show React Query Devtools in development mode */}
-    {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />}
+    {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
   </QueryClientProvider>
 );
 
