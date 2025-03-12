@@ -1,200 +1,242 @@
+
 import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
 import Stats from '@/components/Stats';
 import Calendar from '@/components/Calendar';
 import AchievementCard, { Achievement } from '@/components/AchievementCard';
 import LeaderboardPreview from '@/components/LeaderboardPreview';
-import { format, startOfWeek, addDays } from 'date-fns';
+import { format, startOfWeek, addDays, parseISO } from 'date-fns';
 
-// Mock calendar data - in a real app, this would come from a database
-const generateCalendarData = (data: any) => {
-  const days = [];
-  const today = new Date();
-  const currentMonth = today.getMonth();
-  const currentYear = today.getFullYear();
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+const Statistics: React.FC = () => {
+  const { user } = useAuth();
   
-  for (let day = 1; day <= daysInMonth; day++) {
-    const date = new Date(currentYear, currentMonth, day);
-    
-    // Skip future dates
-    if (date > today) continue;
-    
-    // Random progress for past dates (for demo purposes)
-    // In a real app, this would come from actual user data
-    const isToday = date.toDateString() === today.toDateString();
-    
-    // For today, use the actual progress
-    if (isToday) {
-      const progress = Math.min(100, (data.todayMinutes / data.dailyGoalMinutes) * 100);
-      days.push({
-        date,
-        completed: progress >= 100,
-        progress
-      });
-    } else {
-      // For past dates, generate some random data for demonstration
-      const daysPast = Math.floor((today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+  // Use React Query to fetch session data from Supabase
+  const { data: sessionData, isLoading: sessionsLoading } = useQuery({
+    queryKey: ['sessions', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
       
-      // More likely to have completed recent days (for streak calculation)
-      const completed = daysPast <= data.currentStreak;
-      const progress = completed ? 100 : Math.floor(Math.random() * 100);
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+        
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+    staleTime: 60 * 1000, // 1 minute
+  });
+  
+  // Fetch daily progress data
+  const { data: progressData, isLoading: progressLoading } = useQuery({
+    queryKey: ['daily-progress', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
       
-      days.push({
-        date,
-        completed,
-        progress
-      });
-    }
-  }
+      const { data, error } = await supabase
+        .from('daily_progress')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false })
+        .limit(30); // Last 30 days
+        
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+    staleTime: 60 * 1000, // 1 minute
+  });
   
-  return days;
-};
-
-// Generate weekly data for the chart
-const generateWeeklyData = () => {
-  const data = [];
-  const startDate = startOfWeek(new Date(), { weekStartsOn: 0 });
+  // Fetch streak data
+  const { data: streakData, isLoading: streakLoading } = useQuery({
+    queryKey: ['streak', user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      
+      const { data, error } = await supabase
+        .from('streaks')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+        
+      if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "no rows returned"
+      return data;
+    },
+    enabled: !!user,
+    staleTime: 60 * 1000, // 1 minute
+  });
   
-  for (let i = 0; i < 7; i++) {
-    const date = addDays(startDate, i);
-    const isToday = date.toDateString() === new Date().toDateString();
-    const isFutureDay = date > new Date();
+  // Generate calendar data from actual progress
+  const generateCalendarData = () => {
+    if (!progressData) return [];
     
-    // For demo purposes, generate random minutes for past days
-    // In a real app, this would come from actual user data
-    let minutes = 0;
+    const days = [];
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     
-    if (!isFutureDay) {
-      // Get data from localStorage for today
-      if (isToday) {
-        const storageData = localStorage.getItem('timeflowData');
-        const data = storageData ? JSON.parse(storageData) : { todayMinutes: 0 };
-        minutes = data.todayMinutes;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(currentYear, currentMonth, day);
+      
+      // Skip future dates
+      if (date > today) continue;
+      
+      // Format date string to match Supabase date format (YYYY-MM-DD)
+      const dateStr = format(date, 'yyyy-MM-dd');
+      // Find matching progress data
+      const dayProgress = progressData.find(p => p.date === dateStr);
+      
+      if (dayProgress) {
+        const progress = Math.min(100, (dayProgress.minutes_completed / dayProgress.goal_minutes) * 100);
+        days.push({
+          date,
+          completed: dayProgress.goal_completed,
+          progress
+        });
       } else {
-        // Random data for past days
-        minutes = Math.floor(Math.random() * 80) + 20; // 20-100 minutes
+        // No progress recorded for this day
+        days.push({
+          date,
+          completed: false,
+          progress: 0
+        });
       }
     }
     
-    data.push({
-      day: format(date, 'EEE'),
-      minutes: minutes
-    });
-  }
+    return days;
+  };
   
-  return data;
-};
-
-// Mock achievements data
-const generateAchievements = (data: any): Achievement[] => {
-  return [
-    {
-      id: '1',
-      title: 'Early Bird',
-      description: 'Complete 5 sessions before 9 AM',
-      icon: 'star',
-      unlocked: true,
-      progress: 100
-    },
-    {
-      id: '2',
-      title: 'Consistency Master',
-      description: 'Maintain a 7-day streak',
-      icon: 'award',
-      unlocked: data.currentStreak >= 7,
-      progress: Math.min(100, (data.currentStreak / 7) * 100)
-    },
-    {
-      id: '3',
-      title: 'Focus Champion',
-      description: 'Complete 20 focused sessions',
-      icon: 'trophy',
-      unlocked: data.completedSessions >= 20,
-      progress: Math.min(100, (data.completedSessions / 20) * 100)
-    },
-    {
-      id: '4',
-      title: '10-Hour Milestone',
-      description: 'Accumulate 10 hours of focused time',
-      icon: 'clock',
-      unlocked: data.totalMinutes >= 600,
-      progress: Math.min(100, (data.totalMinutes / 600) * 100)
+  // Generate weekly data for chart from actual data
+  const generateWeeklyData = () => {
+    const data = [];
+    const startDate = startOfWeek(new Date(), { weekStartsOn: 0 });
+    
+    for (let i = 0; i < 7; i++) {
+      const date = addDays(startDate, i);
+      const dateStr = format(date, 'yyyy-MM-dd');
+      const dayProgress = progressData?.find(p => p.date === dateStr);
+      
+      data.push({
+        day: format(date, 'EEE'),
+        minutes: dayProgress ? dayProgress.minutes_completed : 0
+      });
     }
-  ];
-};
-
-// Mock leaderboard data
-const generateLeaderboardData = (data: any) => {
-  // In a real app, this would be fetched from an API
-  return {
-    topUsers: [
+    
+    return data;
+  };
+  
+  // Calculate statistics from real data
+  const calculateStats = () => {
+    if (!sessionData) return {
+      totalMinutes: 0,
+      completedSessions: 0,
+      currentStreak: 0,
+      weeklyData: []
+    };
+    
+    const totalMinutes = sessionData.reduce((total, session) => total + session.duration, 0);
+    const completedSessions = sessionData.filter(session => session.completed).length;
+    const currentStreak = streakData?.current_streak || 0;
+    const weeklyData = generateWeeklyData();
+    
+    return {
+      totalMinutes,
+      completedSessions,
+      currentStreak,
+      weeklyData
+    };
+  };
+  
+  // Generate achievements based on actual data
+  const generateAchievements = (): Achievement[] => {
+    const stats = calculateStats();
+    
+    return [
       {
         id: '1',
-        name: 'Alex Chen',
-        avatar: '',
-        points: 1250,
-        streak: 15,
-        rank: 1
+        title: 'Early Bird',
+        description: 'Complete 5 sessions before 9 AM',
+        icon: 'star',
+        unlocked: true, // Would need time-of-day data to determine this accurately
+        progress: 100
       },
       {
         id: '2',
-        name: 'Maria Rodriguez',
-        avatar: '',
-        points: 980,
-        streak: 8,
-        rank: 2
+        title: 'Consistency Master',
+        description: 'Maintain a 7-day streak',
+        icon: 'award',
+        unlocked: stats.currentStreak >= 7,
+        progress: Math.min(100, (stats.currentStreak / 7) * 100)
       },
       {
         id: '3',
-        name: 'Jamal Wilson',
-        avatar: '',
-        points: 820,
-        streak: 6,
-        rank: 3
+        title: 'Focus Champion',
+        description: 'Complete 20 focused sessions',
+        icon: 'trophy',
+        unlocked: stats.completedSessions >= 20,
+        progress: Math.min(100, (stats.completedSessions / 20) * 100)
+      },
+      {
+        id: '4',
+        title: '10-Hour Milestone',
+        description: 'Accumulate 10 hours of focused time',
+        icon: 'clock',
+        unlocked: stats.totalMinutes >= 600,
+        progress: Math.min(100, (stats.totalMinutes / 600) * 100)
       }
-    ],
-    currentUserRank: {
-      id: 'current',
-      name: 'You',
-      avatar: '',
-      points: Math.floor(data.totalMinutes + (data.currentStreak * 10)),
-      streak: data.currentStreak,
-      rank: 12
-    }
+    ];
   };
-};
-
-const Statistics: React.FC = () => {
-  const [data, setData] = useState<any>(null);
-  const [calendarDays, setCalendarDays] = useState<any[]>([]);
-  const [weeklyData, setWeeklyData] = useState<any[]>([]);
-  const [achievements, setAchievements] = useState<Achievement[]>([]);
-  const [leaderboardData, setLeaderboardData] = useState<{
-    topUsers: any[],
-    currentUserRank: any
-  }>({ topUsers: [], currentUserRank: null });
   
-  useEffect(() => {
-    // Get data from localStorage
-    const storageData = localStorage.getItem('timeflowData');
-    const parsedData = storageData ? JSON.parse(storageData) : {
-      currentStreak: 0,
-      maxStreak: 0,
-      dailyGoalMinutes: 60,
-      todayMinutes: 0,
-      totalMinutes: 0,
-      completedSessions: 0,
-      lastActiveDate: null,
-    };
+  // Generate mock leaderboard data (could be replaced with real leaderboard later)
+  const generateLeaderboardData = () => {
+    const stats = calculateStats();
     
-    setData(parsedData);
-    setCalendarDays(generateCalendarData(parsedData));
-    setWeeklyData(generateWeeklyData());
-    setAchievements(generateAchievements(parsedData));
-    setLeaderboardData(generateLeaderboardData(parsedData));
-  }, []);
+    return {
+      topUsers: [
+        {
+          id: '1',
+          name: 'Alex Chen',
+          avatar: '',
+          points: 1250,
+          streak: 15,
+          rank: 1
+        },
+        {
+          id: '2',
+          name: 'Maria Rodriguez',
+          avatar: '',
+          points: 980,
+          streak: 8,
+          rank: 2
+        },
+        {
+          id: '3',
+          name: 'Jamal Wilson',
+          avatar: '',
+          points: 820,
+          streak: 6,
+          rank: 3
+        }
+      ],
+      currentUserRank: {
+        id: 'current',
+        name: 'You',
+        avatar: '',
+        points: Math.floor(stats.totalMinutes + (stats.currentStreak * 10)),
+        streak: stats.currentStreak,
+        rank: 12
+      }
+    };
+  };
   
-  if (!data) {
+  const isLoading = sessionsLoading || progressLoading || streakLoading;
+  
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-pulse">Loading statistics...</div>
@@ -202,16 +244,21 @@ const Statistics: React.FC = () => {
     );
   }
   
+  const stats = calculateStats();
+  const calendarDays = generateCalendarData();
+  const achievements = generateAchievements();
+  const leaderboardData = generateLeaderboardData();
+  
   return (
     <div className="animate-fade-in">
       <h1 className="text-3xl font-semibold mb-8">Your Statistics</h1>
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         <Stats 
-          totalMinutes={data.totalMinutes} 
-          completedSessions={data.completedSessions}
-          currentStreak={data.currentStreak}
-          weeklyData={weeklyData}
+          totalMinutes={stats.totalMinutes} 
+          completedSessions={stats.completedSessions}
+          currentStreak={stats.currentStreak}
+          weeklyData={stats.weeklyData}
         />
         
         <Calendar days={calendarDays} />
@@ -236,7 +283,7 @@ const Statistics: React.FC = () => {
                 <div className="flex justify-between mb-1">
                   <span className="text-sm">Daily Average</span>
                   <span className="text-sm font-medium">
-                    {Math.round(data.totalMinutes / Math.max(1, data.completedSessions / 2))} min
+                    {Math.round(stats.totalMinutes / Math.max(1, stats.completedSessions / 2))} min
                   </span>
                 </div>
                 <div className="w-full bg-secondary rounded-full h-1.5">
@@ -248,7 +295,7 @@ const Statistics: React.FC = () => {
                 <div className="flex justify-between mb-1">
                   <span className="text-sm">Weekly Goal</span>
                   <span className="text-sm font-medium">
-                    {data.dailyGoalMinutes * 7} min
+                    {(progressData?.[0]?.goal_minutes || 60) * 7} min
                   </span>
                 </div>
                 <div className="w-full bg-secondary rounded-full h-1.5">
@@ -260,7 +307,7 @@ const Statistics: React.FC = () => {
                 <div className="flex justify-between mb-1">
                   <span className="text-sm">Monthly Progress</span>
                   <span className="text-sm font-medium">
-                    {Math.round(data.totalMinutes / 60)} hours
+                    {Math.round(stats.totalMinutes / 60)} hours
                   </span>
                 </div>
                 <div className="w-full bg-secondary rounded-full h-1.5">

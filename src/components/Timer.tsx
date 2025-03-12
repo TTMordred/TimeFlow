@@ -1,25 +1,30 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Pause, RotateCcw } from 'lucide-react';
+import { Play, Pause, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
+import { useTimer } from '@/components/context/TimerContext';
+import { useTimerSounds } from '@/hooks/useTimerSounds';
 
 interface TimerProps {
-  duration: number; // in minutes
-  onComplete?: () => void;
   onProgress?: (progress: number) => void;
 }
 
-const Timer: React.FC<TimerProps> = ({ 
-  duration, 
-  onComplete, 
-  onProgress 
-}) => {
-  const [secondsLeft, setSecondsLeft] = useState(duration * 60);
-  const [isActive, setIsActive] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const totalSeconds = duration * 60;
+const Timer: React.FC<TimerProps> = ({ onProgress }) => {
+  const { 
+    isActive,
+    isPaused,
+    secondsLeft,
+    progress,
+    startTimer,
+    pauseTimer,
+    resumeTimer,
+    resetTimer,
+    sessionDuration
+  } = useTimer();
+  
+  const { playSound, muted, toggleMute } = useTimerSounds();
+  const prevSecondsRef = useRef(secondsLeft);
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -27,83 +32,50 @@ const Timer: React.FC<TimerProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const calculateProgress = useCallback(
-    () => ((totalSeconds - secondsLeft) / totalSeconds) * 100,
-    [secondsLeft, totalSeconds]
-  );
-
-  const start = () => {
-    setIsActive(true);
-    setIsPaused(false);
-    toast("Session started", {
-      description: `Your ${duration} minute session has begun!`,
-    });
-  };
-
-  const pause = () => {
-    setIsPaused(true);
-    toast("Session paused", {
-      description: "You can resume your session at any time.",
-    });
-  };
-
-  const resume = () => {
-    setIsPaused(false);
-    toast("Session resumed", {
-      description: "Keep going! You're doing great.",
-    });
-  };
-
-  const reset = () => {
-    setIsActive(false);
-    setIsPaused(false);
-    setSecondsLeft(duration * 60);
-    onProgress && onProgress(0);
-    toast("Session reset", {
-      description: "Your session has been reset.",
-    });
-  };
-
+  // Play tick sound on certain intervals
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
-
-    if (isActive && !isPaused) {
-      interval = setInterval(() => {
-        setSecondsLeft((seconds) => {
-          if (seconds <= 1) {
-            clearInterval(interval!);
-            setIsActive(false);
-            onComplete && onComplete();
-            toast("Session completed!", {
-              description: "Congratulations on completing your session!",
-            });
-            return 0;
-          }
-          return seconds - 1;
-        });
-      }, 1000);
-    } else if (interval) {
-      clearInterval(interval);
+    if (isActive && !isPaused && secondsLeft !== prevSecondsRef.current) {
+      // Play tick sound every minute or when there's 5, 4, 3, 2, 1 seconds left
+      if (secondsLeft % 60 === 0 || (secondsLeft <= 5 && secondsLeft > 0)) {
+        playSound('tick');
+      }
+      
+      // Session completed
+      if (prevSecondsRef.current > 0 && secondsLeft === 0) {
+        playSound('complete');
+      }
+      
+      prevSecondsRef.current = secondsLeft;
     }
+  }, [isActive, isPaused, secondsLeft, playSound]);
 
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isActive, isPaused, onComplete]);
-
+  // Update parent component with progress
   useEffect(() => {
     if (onProgress) {
-      onProgress(calculateProgress());
+      onProgress(progress);
     }
-  }, [secondsLeft, onProgress, calculateProgress]);
-
-  // Update the timer if the duration prop changes
-  useEffect(() => {
-    setSecondsLeft(duration * 60);
-    if (isActive) {
-      reset();
-    }
-  }, [duration]);
+  }, [progress, onProgress]);
+  
+  // Timer control handlers with sound
+  const handleStart = () => {
+    startTimer(sessionDuration);
+    playSound('start');
+  };
+  
+  const handlePause = () => {
+    pauseTimer();
+    playSound('pause');
+  };
+  
+  const handleResume = () => {
+    resumeTimer();
+    playSound('resume');
+  };
+  
+  const handleReset = () => {
+    resetTimer();
+    playSound('pause');
+  };
 
   return (
     <div className="flex flex-col items-center glass p-8 rounded-2xl">
@@ -114,7 +86,7 @@ const Timer: React.FC<TimerProps> = ({
       <div className="flex space-x-4">
         {!isActive ? (
           <Button 
-            onClick={start}
+            onClick={handleStart}
             className="bg-primary hover:bg-primary/90 text-white"
           >
             <Play className="mr-2 h-4 w-4" />
@@ -124,7 +96,7 @@ const Timer: React.FC<TimerProps> = ({
           <>
             {!isPaused ? (
               <Button 
-                onClick={pause}
+                onClick={handlePause}
                 variant="outline"
                 className="border-primary text-primary hover:bg-primary/10"
               >
@@ -133,7 +105,7 @@ const Timer: React.FC<TimerProps> = ({
               </Button>
             ) : (
               <Button 
-                onClick={resume}
+                onClick={handleResume}
                 className="bg-primary hover:bg-primary/90 text-white"
               >
                 <Play className="mr-2 h-4 w-4" />
@@ -144,12 +116,21 @@ const Timer: React.FC<TimerProps> = ({
         )}
         
         <Button 
-          onClick={reset}
+          onClick={handleReset}
           variant="outline"
           className="border-muted-foreground text-muted-foreground hover:bg-muted/50"
         >
           <RotateCcw className="mr-2 h-4 w-4" />
           Reset
+        </Button>
+        
+        <Button
+          onClick={toggleMute}
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground hover:text-foreground"
+        >
+          {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
         </Button>
       </div>
       
@@ -159,7 +140,7 @@ const Timer: React.FC<TimerProps> = ({
             "h-full bg-primary transition-all duration-1000",
             isActive && !isPaused && "animate-pulse-slow"
           )}
-          style={{ width: `${calculateProgress()}%` }}
+          style={{ width: `${progress}%` }}
         />
       </div>
     </div>

@@ -6,6 +6,7 @@ import { Home, Clock, BarChart3, Settings, Menu, X, LogOut, User } from 'lucide-
 import { Button } from '@/components/ui/button';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/useAuth';
+import MiniTimerDisplay from './MiniTimerDisplay';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,7 +80,9 @@ const Header: React.FC = () => {
           </Link>
         </div>
         
-        <div className="flex items-center">
+        <div className="flex items-center space-x-2">
+          <MiniTimerDisplay />
+          
           {user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

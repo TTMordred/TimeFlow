@@ -1,92 +1,58 @@
+
 import React, { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
+import { useTimer } from '@/components/context/TimerContext';
 import Timer from '@/components/Timer';
 import EnergyTree from '@/components/EnergyTree';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, MinusCircle } from 'lucide-react';
+import { PlusCircle, MinusCircle, Clock, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { updateDailyProgress, updateStreak } from '@/utils/dataUtils';
+import { format } from 'date-fns';
+import { Separator } from "@/components/ui/separator";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const Sessions: React.FC = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [sessionDuration, setSessionDuration] = useState(25);
-  const [progress, setProgress] = useState(0);
+  const { 
+    sessionDuration, 
+    progress, 
+    updateSessionDuration 
+  } = useTimer();
   
   const handleDurationChange = (amount: number) => {
     const newDuration = Math.max(5, Math.min(120, sessionDuration + amount));
-    setSessionDuration(newDuration);
+    updateSessionDuration(newDuration);
   };
   
   const handleTimerProgress = (timerProgress: number) => {
-    setProgress(timerProgress);
+    // This is handled by the Timer component already
   };
-  
-  // Mutation for completing a session
-  const sessionMutation = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error("User not authenticated");
+
+  // Fetch recent sessions
+  const { data: recentSessions, isLoading } = useQuery({
+    queryKey: ['recentSessions'],
+    queryFn: async () => {
+      if (!user) return [];
       
-      try {
-        // 1. Create the session
-        const { error: sessionError } = await supabase
-          .from('sessions')
-          .insert({
-            user_id: user.id,
-            duration: sessionDuration,
-            completed: true,
-            category: 'default'
-          });
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(5);
         
-        if (sessionError) throw sessionError;
-        
-        // 2. Update daily progress
-        const updatedProgress = await updateDailyProgress(user.id, sessionDuration);
-        if (!updatedProgress) throw new Error("Failed to update daily progress");
-        
-        // 3. Update streak if goal was just completed
-        if (updatedProgress.goalCompleted && !updatedProgress.previousGoalCompleted) {
-          const streakUpdate = await updateStreak(
-            user.id, 
-            updatedProgress.goalCompleted, 
-            !!updatedProgress.previousGoalCompleted
-          );
-          
-          if (streakUpdate) {
-            // Show streak notification
-            toast("Daily goal achieved!", {
-              description: `You've maintained a streak of ${streakUpdate.currentStreak} days. Keep it up!`,
-            });
-          }
-        }
-        
-        return { success: true };
-      } catch (error) {
-        console.error("Session completion error:", error);
+      if (error) {
+        console.error('Error fetching sessions:', error);
         throw error;
       }
-    },
-    onSuccess: () => {
-      // Invalidate queries to refetch data
-      queryClient.invalidateQueries({ queryKey: ['user-data'] });
       
-      toast("Session complete!", {
-        description: `You've added ${sessionDuration} minutes to your progress.`,
-      });
+      return data || [];
     },
-    onError: (error) => {
-      console.error("Session completion error:", error);
-      toast("Error completing session", {
-        description: "There was a problem saving your session. Please try again.",
-      });
-    }
+    enabled: !!user,
   });
-  
-  const handleSessionComplete = () => {
-    sessionMutation.mutate();
-  };
   
   return (
     <div className="container mx-auto max-w-4xl animate-fade-in">
@@ -119,21 +85,53 @@ const Sessions: React.FC = () => {
             </div>
           </div>
           
-          <Timer 
-            duration={sessionDuration} 
-            onComplete={handleSessionComplete} 
-            onProgress={handleTimerProgress}
-          />
+          <Timer onProgress={handleTimerProgress} />
         </div>
         
-        <div className="flex flex-col items-center justify-center">
-          <div className="glass rounded-xl p-8 flex flex-col items-center justify-center h-full">
+        <div className="flex flex-col items-center gap-6">
+          <div className="glass rounded-xl p-8 flex flex-col items-center justify-center w-full">
             <h2 className="text-xl font-medium mb-6">Your Energy Tree</h2>
             <EnergyTree progress={progress} size="lg" />
             <p className="text-sm text-muted-foreground mt-6 text-center">
               Complete your session to grow your energy tree and track your daily progress.
             </p>
           </div>
+          
+          <Card className="w-full">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle>Recent Sessions</CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <CardDescription>Your latest focus sessions</CardDescription>
+              <Separator />
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="flex justify-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                </div>
+              ) : recentSessions && recentSessions.length > 0 ? (
+                <ul className="space-y-2">
+                  {recentSessions.map((session) => (
+                    <li key={session.id} className="flex justify-between items-center py-2 border-b border-border/40 last:border-0">
+                      <div className="flex items-center">
+                        <div className={`w-2 h-2 rounded-full mr-2 ${session.completed ? 'bg-green-500' : 'bg-amber-500'}`}></div>
+                        <span>{session.duration} minutes</span>
+                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        {format(new Date(session.created_at), 'MMM d, h:mm a')}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-center py-4 text-muted-foreground">
+                  No sessions recorded yet
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
       

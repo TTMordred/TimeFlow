@@ -5,7 +5,15 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Clock, Mail, Lock } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { 
+  Clock, 
+  Mail, 
+  Lock,
+  CheckCircle2,
+  XCircle,
+  AlertCircle
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 const Auth = () => {
@@ -15,17 +23,56 @@ const Auth = () => {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState(0);
+
+  // Password validation states
+  const [hasMinLength, setHasMinLength] = useState(false);
+  const [hasNumber, setHasNumber] = useState(false);
+  const [hasSpecial, setHasSpecial] = useState(false);
+  const [hasUppercase, setHasUppercase] = useState(false);
 
   // Redirect if user is logged in
   if (user && !loading) {
     return <Navigate to="/" />;
   }
 
+  const validatePassword = (value: string) => {
+    // Password requirements
+    const minLength = value.length >= 8;
+    const containsNumber = /\d/.test(value);
+    const containsSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(value);
+    const containsUppercase = /[A-Z]/.test(value);
+
+    setHasMinLength(minLength);
+    setHasNumber(containsNumber);
+    setHasSpecial(containsSpecial);
+    setHasUppercase(containsUppercase);
+
+    // Calculate strength (25% for each requirement)
+    const strength = [minLength, containsNumber, containsSpecial, containsUppercase]
+      .filter(Boolean).length * 25;
+    setPasswordStrength(strength);
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setPassword(value);
+    if (!isLogin) {
+      validatePassword(value);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
+      if (!isLogin && passwordStrength < 75) {
+        toast.error("Please use a stronger password");
+        setIsSubmitting(false);
+        return;
+      }
+
       let error;
       if (isLogin) {
         const result = await signIn(email, password);
@@ -36,11 +83,11 @@ const Auth = () => {
       }
 
       if (error) {
-        toast(error.message || 'An error occurred');
+        toast.error(error.message);
       }
     } catch (err) {
       const error = err as Error;
-      toast(error.message || 'An error occurred');
+      toast.error(error.message || 'An error occurred');
     } finally {
       setIsSubmitting(false);
     }
@@ -52,9 +99,8 @@ const Auth = () => {
       await signInWithGoogle();
     } catch (err) {
       const error = err as Error;
-      toast(error.message || 'An error occurred with Google sign in');
+      toast.error(error.message || 'An error occurred with Google sign in');
     } finally {
-      // Set a timeout since we're redirecting
       setTimeout(() => setIsGoogleLoading(false), 5000);
     }
   };
@@ -72,9 +118,15 @@ const Auth = () => {
         </div>
 
         <div className="glass rounded-xl p-8">
-          <h1 className="text-2xl font-semibold mb-6 text-center">
-            {isLogin ? 'Sign In' : 'Create Account'}
+          <h1 className="text-2xl font-semibold mb-2 text-center">
+            {isLogin ? 'Welcome Back!' : 'Create Account'}
           </h1>
+          <p className="text-muted-foreground text-center mb-6">
+            {isLogin 
+              ? 'Sign in to continue your productivity journey'
+              : 'Join us to start tracking your time effectively'
+            }
+          </p>
 
           <Button 
             type="button" 
@@ -119,7 +171,9 @@ const Auth = () => {
               <div className="w-full border-t border-gray-300"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-background text-muted-foreground">Or continue with email</span>
+              <span className="px-2 bg-background text-muted-foreground">
+                Or continue with email
+              </span>
             </div>
           </div>
 
@@ -154,11 +208,60 @@ const Auth = () => {
                   placeholder="••••••••"
                   className="pl-10"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={handlePasswordChange}
                   required
-                  minLength={6}
+                  minLength={8}
                 />
               </div>
+              
+              {!isLogin && password.length > 0 && (
+                <div className="mt-4 space-y-4">
+                  <div className="space-y-2">
+                    <Progress value={passwordStrength} className="h-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Password strength: {passwordStrength}%
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      {hasMinLength ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-red-500" />
+                      )}
+                      <span>At least 8 characters</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 text-sm">
+                      {hasUppercase ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-red-500" />
+                      )}
+                      <span>One uppercase letter</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 text-sm">
+                      {hasNumber ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-red-500" />
+                      )}
+                      <span>One number</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 text-sm">
+                      {hasSpecial ? (
+                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-red-500" />
+                      )}
+                      <span>One special character</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <Button
@@ -169,12 +272,27 @@ const Auth = () => {
               {isSubmitting ? (
                 <div className="flex items-center">
                   <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                  Processing...
+                  {isLogin ? 'Signing in...' : 'Creating account...'}
                 </div>
               ) : (
                 isLogin ? 'Sign In' : 'Create Account'
               )}
             </Button>
+
+            {isLogin && (
+              <div className="text-sm text-center">
+                <button
+                  type="button"
+                  className="text-primary hover:underline focus:outline-none"
+                  onClick={() => toast.info(
+                    "Password Reset",
+                    { description: "This feature will be available soon!" }
+                  )}
+                >
+                  Forgot your password?
+                </button>
+              </div>
+            )}
           </form>
 
           <div className="mt-6 text-center">
@@ -188,6 +306,31 @@ const Auth = () => {
               </button>
             </p>
           </div>
+        </div>
+
+        <div className="mt-8 text-center text-sm text-muted-foreground">
+          <p>
+            By continuing, you agree to our{' '}
+            <button 
+              className="text-primary hover:underline"
+              onClick={() => toast.info(
+                "Terms of Service",
+                { description: "Terms of Service will be available soon!" }
+              )}
+            >
+              Terms of Service
+            </button>
+            {' '}and{' '}
+            <button
+              className="text-primary hover:underline"
+              onClick={() => toast.info(
+                "Privacy Policy",
+                { description: "Privacy Policy will be available soon!" }
+              )}
+            >
+              Privacy Policy
+            </button>
+          </p>
         </div>
       </div>
     </div>
